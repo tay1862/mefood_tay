@@ -23,7 +23,9 @@ import {
   Analytics,
   People,
   Settings,
-  TableBar
+  TableBar,
+  Business,
+  QrCode
 } from '@mui/icons-material'
 import { RestaurantNavbar } from '@/lib/components/RestaurantNavbar'
 import { Footer } from '@/lib/components/Footer'
@@ -113,8 +115,25 @@ export default function RestaurantAdminPage() {
       title: t('restaurantAdmin.staffManagement'),
       description: t('restaurantAdmin.staffManagementDesc'),
       icon: <People fontSize="large" />,
-      action: () => {},
-      available: false
+      action: () => router.push('/restaurant-admin/staff'),
+      available: true,
+      requiresRestaurantData: false
+    },
+    {
+      title: 'Department Management',
+      description: 'Manage restaurant departments for order routing',
+      icon: <Business fontSize="large" />,
+      action: () => router.push('/restaurant-admin/departments'),
+      available: true,
+      requiresRestaurantData: false
+    },
+    {
+      title: 'QR Code Management',
+      description: 'Generate and manage QR codes for table ordering',
+      icon: <QrCode fontSize="large" />,
+      action: () => router.push('/restaurant-admin/qr-codes'),
+      available: hasRestaurant,
+      requiresRestaurantData: true
     },
     {
       title: t('restaurantAdmin.settings'),

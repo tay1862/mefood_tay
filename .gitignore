@@ -45,3 +45,8 @@ next-env.d.ts
 # Include uploads directory but not the actual files (except .gitkeep)
 /public/uploads/*
 !/public/uploads/.gitkeep
+
+
+*.db
+*.sqlite
+

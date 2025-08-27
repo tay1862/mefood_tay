@@ -9,6 +9,11 @@ declare module "next-auth" {
       image?: string | null
       restaurantName: string
       ownerName?: string | null
+      isStaff: boolean
+      role: {
+        id: string
+        name: string
+      } | null
     }
   }
 
@@ -17,6 +22,11 @@ declare module "next-auth" {
     restaurantName: string
     ownerName: string | null
     ownerImage: string | null
+    isStaff: boolean
+    role: {
+      id: string
+      name: string
+    } | null
   }
 }
 
@@ -25,5 +35,10 @@ declare module "next-auth/jwt" {
     id: string
     restaurantName: string
     ownerName: string | null
+    isStaff: boolean
+    role: {
+      id: string
+      name: string
+    } | null
   }
 }

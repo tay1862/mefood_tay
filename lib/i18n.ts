@@ -4,6 +4,7 @@ import LanguageDetector from 'i18next-browser-languagedetector'
 
 import thTranslation from './locales/th/translation.json'
 import enTranslation from './locales/en/translation.json'
+import loTranslation from './locales/lo/translation.json'
 
 const resources = {
   th: {
@@ -11,6 +12,9 @@ const resources = {
   },
   en: {
     translation: enTranslation
+  },
+  lo: {
+    translation: loTranslation
   }
 }
 
@@ -18,7 +22,7 @@ const resources = {
 const getSavedLanguage = () => {
   if (typeof window !== 'undefined') {
     const saved = localStorage.getItem('i18nextLng')
-    if (saved === 'th' || saved === 'en') {
+    if (saved === 'th' || saved === 'en' || saved === 'lo') {
       return saved
     }
   }

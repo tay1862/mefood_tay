@@ -19,7 +19,7 @@ export function LanguageSwitcher() {
   // Load saved language preference on mount and sync with i18n
   useEffect(() => {
     const savedLanguage = localStorage.getItem('i18nextLng')
-    if (savedLanguage && (savedLanguage === 'th' || savedLanguage === 'en')) {
+    if (savedLanguage && (savedLanguage === 'th' || savedLanguage === 'en' || savedLanguage === 'lo')) {
       // Only change if different from current language
       if (i18n.language !== savedLanguage) {
         i18n.changeLanguage(savedLanguage)
@@ -46,7 +46,12 @@ export function LanguageSwitcher() {
   }
 
   const getCurrentLanguageLabel = () => {
-    return i18n.language === 'th' ? 'TH' : 'EN'
+    switch (i18n.language) {
+      case 'th': return 'TH'
+      case 'en': return 'EN'
+      case 'lo': return 'LO'
+      default: return 'TH'
+    }
   }
 
   return (
@@ -82,13 +87,19 @@ export function LanguageSwitcher() {
           onClick={() => changeLanguage('th')}
           selected={i18n.language === 'th'}
         >
-          <ListItemText primary="TH" />
+          <ListItemText primary="ไทย (TH)" />
         </MenuItem>
         <MenuItem 
           onClick={() => changeLanguage('en')}
           selected={i18n.language === 'en'}
         >
-          <ListItemText primary="EN" />
+          <ListItemText primary="English (EN)" />
+        </MenuItem>
+        <MenuItem 
+          onClick={() => changeLanguage('lo')}
+          selected={i18n.language === 'lo'}
+        >
+          <ListItemText primary="ລາວ (LO)" />
         </MenuItem>
       </Menu>
     </Box>

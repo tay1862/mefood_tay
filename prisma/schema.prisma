@@ -9,7 +9,7 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -19,12 +19,12 @@ model Account {
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
+  refresh_token     String? 
+  access_token      String? 
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String? @db.Text
+  id_token          String? 
   session_state     String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -40,6 +40,15 @@ model Session {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique // e.g., "Admin", "Waiter", "Kitchen", "Cafe", "WaterStation", "Cashier"
+  description String?
+  users       User[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 model User {
   id            String    @id @default(cuid())
   
@@ -49,7 +58,7 @@ model User {
   emailVerified DateTime?
   
   // User profile
-  ownerName     String?   // Restaurant owner's name
+  ownerName     String?   // Restaurant owner's name or staff name
   ownerImage    String?
   
   // Restaurant information (merged from Restaurant model)
@@ -59,6 +68,11 @@ model User {
   restaurantPhone       String?
   restaurantEmail       String?
   isRestaurantActive    Boolean  @default(true)
+  
+  // Staff management fields
+  roleId        String?   // Role assignment for staff
+  isStaff       Boolean   @default(false) // Distinguish between owner and staff
+  restaurantOwnerId String? // Link staff to restaurant owner
   
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -73,8 +87,14 @@ model User {
   customerSessions CustomerSession[] @relation("UserSessions")
   payments        Payment[]
   settings        RestaurantSettings?
+  departments     Department[]
   
-  // Staff relations (for future multi-staff support)
+  // Role relation
+  role            Role?     @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  
+  // Staff relations
+  restaurantOwner User?     @relation("RestaurantStaff", fields: [restaurantOwnerId], references: [id], onDelete: Cascade)
+  staff           User[]    @relation("RestaurantStaff")
   waitingSessions CustomerSession[] @relation("WaiterSessions")
   waitingOrders   Order[] @relation("OrderWaiter")
   cookingOrders   Order[] @relation("OrderCook")  
@@ -98,6 +118,7 @@ model Table {
   isActive     Boolean    @default(true)
   sortOrder    Int        @default(0) // Order for table display and management
   qrCode       String?    // QR code for table ordering
+  qrCodeActive Boolean    @default(true) // Whether QR code is active for ordering
   // Grid layout position fields
   gridX        Int        @default(0)  // Grid column position (0-11)
   gridY        Int        @default(0)  // Grid row position
@@ -107,10 +128,84 @@ model Table {
   user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   orders       Order[]
   sessions     CustomerSession[]
+  qrSessions   QRSession[]
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
   @@unique([userId, number])
+}
+
+// QR Code Session Management
+model QRSession {
+  id           String     @id @default(cuid())
+  sessionToken String     @unique // Unique token for QR session
+  tableId      String
+  table        Table      @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  isActive     Boolean    @default(true)
+  customerName String?    // Optional customer name
+  guestCount   Int        @default(1) // Number of guests
+  orders       Order[]
+  staffCalls   StaffCall[]
+  musicRequests MusicRequest[]
+  startedAt    DateTime   @default(now())
+  endedAt      DateTime?  // When session was closed/bill paid
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  mergedIntoQrSessionId String? @map("merged_into_qr_session_id") // Reference to the QrSession it was merged into
+  mergedIntoQrSession   QRSession? @relation("MergedSessions", fields: [mergedIntoQrSessionId], references: [id])
+  mergedSessions        QRSession[] @relation("MergedSessions")
+}
+
+// Staff Call System
+model StaffCall {
+  id           String     @id @default(cuid())
+  qrSessionId  String
+  qrSession    QRSession  @relation(fields: [qrSessionId], references: [id], onDelete: Cascade)
+  type         StaffCallType @default(GENERAL)
+  message      String?    // Optional message from customer
+  status       StaffCallStatus @default(PENDING)
+  respondedBy  String?    // Staff member who responded
+  respondedAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+enum StaffCallType {
+  GENERAL      // General assistance
+  WATER        // Request for water
+  BILL         // Request for bill
+  COMPLAINT    // Complaint or issue
+  ASSISTANCE   // Need help with order
+}
+
+enum StaffCallStatus {
+  PENDING      // Waiting for staff response
+  ACKNOWLEDGED // Staff has seen the call
+  RESPONDED    // Staff has responded/resolved
+  CANCELLED    // Customer cancelled the call
+}
+
+// Music Request System
+model MusicRequest {
+  id           String     @id @default(cuid())
+  qrSessionId  String
+  qrSession    QRSession  @relation(fields: [qrSessionId], references: [id], onDelete: Cascade)
+  songTitle    String
+  artist       String?
+  message      String?    // Optional message with request
+  status       MusicRequestStatus @default(PENDING)
+  respondedBy  String?    // Staff member who responded
+  respondedAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+enum MusicRequestStatus {
+  PENDING      // Waiting for staff response
+  APPROVED     // Request approved, will play
+  DECLINED     // Request declined
+  PLAYING      // Currently playing
+  COMPLETED    // Finished playing
 }
 
 // Menu Management Models
@@ -129,19 +224,32 @@ model Category {
   @@unique([userId, name])
 }
 
+model Department {
+  id          String     @id @default(cuid())
+  name        String     @unique // e.g., "Water Station", "Cafe", "Kitchen"
+  description String?
+  userId      String     // Link to the restaurant owner
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  menuItems   MenuItem[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
 model MenuItem {
   id           String     @id @default(cuid())
   name         String
   description  String?
-  price        Decimal    @db.Decimal(10, 2)
+  price        Decimal    
   image        String?
   isActive     Boolean    @default(true)
   isAvailable  Boolean    @default(true)
   sortOrder    Int        @default(0)
   userId       String
   categoryId   String
+  departmentId String?    // Link to department for order routing
   user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   category     Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   orderItems   OrderItem[]
   selections   Selection[]
   createdAt    DateTime   @default(now())
@@ -166,7 +274,7 @@ model SelectionOption {
   id          String    @id @default(cuid())
   name        String    // e.g., "Small", "Large", "Extra Cheese"
   description String?
-  priceAdd    Decimal   @db.Decimal(10, 2) @default(0) // additional price
+  priceAdd    Decimal    @default(0) // additional price
   isAvailable Boolean   @default(true)
   sortOrder   Int       @default(0)
   selectionId String
@@ -211,6 +319,14 @@ enum SessionStatus {
   CANCELLED     // Session cancelled
 }
 
+model CancellationReason {
+  id          String    @id @default(cuid())
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  reason      String    @unique
+  orders      Order[]
+}
+
 // Order Management Models
 model Order {
   id             String         @id @default(cuid())
@@ -220,13 +336,14 @@ model Order {
   mainOrder      Order?         @relation("MainSubOrders", fields: [mainOrderId], references: [id], onDelete: SetNull)
   subOrders      Order[]        @relation("MainSubOrders")
   status         OrderStatus    @default(PENDING)
-  totalAmount    Decimal        @db.Decimal(10, 2)
+  totalAmount    Decimal        
   customerName   String?
   customerPhone  String?
   customerEmail  String?
   notes          String?
   tableId        String?        // Optional table for dine-in orders
   sessionId      String?        // Link to customer session
+  qrSessionId    String?        // Link to QR session
   userId         String
   waiterId       String?        // Staff member who took the order
   cookId         String?        // Kitchen staff assigned to prepare
@@ -238,19 +355,22 @@ model Order {
   user           User           @relation("UserOrders", fields: [userId], references: [id], onDelete: Cascade)
   table          Table?         @relation(fields: [tableId], references: [id], onDelete: SetNull)
   session        CustomerSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  qrSession      QRSession?     @relation(fields: [qrSessionId], references: [id], onDelete: SetNull)
   waiter         User?          @relation("OrderWaiter", fields: [waiterId], references: [id], onDelete: SetNull)
   cook           User?          @relation("OrderCook", fields: [cookId], references: [id], onDelete: SetNull)
   server         User?          @relation("OrderServer", fields: [servedBy], references: [id], onDelete: SetNull)
   items          OrderItem[]
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
+  cancellationReasonId String? // Optional: If cancelled
+  cancellationReason CancellationReason? @relation(fields: [cancellationReasonId], references: [id])
 }
 
 model OrderItem {
   id         String   @id @default(cuid())
   quantity   Int
-  price      Decimal  @db.Decimal(10, 2)
-  notes      String?  @db.Text
+  price      Decimal  
+  notes      String?  
   selections Json?    // Store selected options as JSON
   orderId    String
   menuItemId String
@@ -258,6 +378,7 @@ model OrderItem {
   menuItem   MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  status          String @default("PENDING") // PENDING, PREPARING, READY, SERVED, CANCELLED
 }
 
 enum OrderStatus {
@@ -269,6 +390,27 @@ enum OrderStatus {
   DELIVERED     // Order delivered to customer
   COMPLETED     // Order completed and paid
   CANCELLED     // Order cancelled
+}
+
+enum PaymentMethod {
+  CASH
+  CREDIT_CARD
+  MOBILE_PAYMENT
+  BANK_TRANSFER
+  OTHER
+}
+
+model BillSplit {
+  id           String    @id @default(cuid())
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  totalAmount  Decimal
+  paidAmount   Decimal   @db.Decimal(10, 2) @default(0)
+  status       String    @default("PENDING") // PENDING, PAID, PARTIAL_PAID
+  qrSessionId  String
+  qrSession    QRSession @relation(fields: [qrSessionId], references: [id])
+  orderId      String?
+  order        Order?    @relation(fields: [orderId], references: [id])
 }
 
 // Payment/Billing Management Models
@@ -295,26 +437,38 @@ model Payment {
   
   // Payment details
   paymentMethod     PaymentMethod     @default(CASH)
-  subtotalAmount    Decimal           @db.Decimal(10, 2) // Total of all items
-  discountAmount    Decimal           @db.Decimal(10, 2) @default(0)
-  extraChargesAmount Decimal          @db.Decimal(10, 2) @default(0)
-  finalAmount       Decimal           @db.Decimal(10, 2) // Amount after charges/discounts
-  receivedAmount    Decimal?          @db.Decimal(10, 2) // For cash payments
-  changeAmount      Decimal?          @db.Decimal(10, 2) // For cash payments
+  subtotalAmount    Decimal            // Total of all items
+  discountAmount    Decimal            @default(0)
+  extraChargesAmount Decimal           @default(0)
+  finalAmount       Decimal            // Amount after charges/discounts
+  receivedAmount    Decimal?           // For cash payments
+  changeAmount      Decimal?           // For cash payments
   
   // Additional data
-  notes             String?           @db.Text
+  notes             String?           
   extraCharges      Json?             // Store extra charges as JSON array
   
   // Relations
   session           CustomerSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  items             PaymentItem[]     // Snapshot of ordered items
-  
+  orders            Order[]
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
-  
-  @@unique([userId, paymentNumber])
+}
+
+model RestaurantSettings {
+  id                    String     @id @default(cuid())
+  userId                String     @unique
+  user                  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currency              String     @default("THB") // e.g., THB, USD, LAK
+  language              String     @default("th")  // e.g., th, en, lo
+  taxRate               Decimal    @default(0) @db.Decimal(5, 2)
+  serviceChargeRate     Decimal    @default(0) @db.Decimal(5, 2)
+  autoAcceptOrders      Boolean    @default(true)
+  printKitchenReceipt   Boolean    @default(true)
+  printCustomerReceipt  Boolean    @default(true)
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
 }
 
 model PaymentItem {
@@ -324,14 +478,14 @@ model PaymentItem {
   // Menu item snapshot data (copied at payment time)
   menuItemName      String
   menuItemDescription String?
-  menuItemPrice     Decimal   @db.Decimal(10, 2)
+  menuItemPrice     Decimal   
   categoryName      String
   
   // Order item data
   quantity          Int
-  unitPrice         Decimal   @db.Decimal(10, 2) // Price per unit including selections
-  totalPrice        Decimal   @db.Decimal(10, 2) // quantity * unitPrice
-  notes             String?   @db.Text
+  unitPrice         Decimal    // Price per unit including selections
+  totalPrice        Decimal    // quantity * unitPrice
+  notes             String?   
   selections        Json?     // Selected options as JSON
   
   // Relations
@@ -341,27 +495,5 @@ model PaymentItem {
   updatedAt         DateTime  @updatedAt
 }
 
-enum PaymentMethod {
-  CASH
-  QR
-  CREDIT_CARD
-  DEBIT_CARD
-}
 
-// Restaurant Settings Model (now User Settings)
-model RestaurantSettings {
-  id                    String     @id @default(cuid())
-  userId                String     @unique
-  allowOnlineOrdering   Boolean    @default(true)
-  acceptCashPayments    Boolean    @default(true)
-  acceptCardPayments    Boolean    @default(false)
-  deliveryEnabled       Boolean    @default(false)
-  pickupEnabled         Boolean    @default(true)
-  minimumOrderAmount    Decimal?   @db.Decimal(10, 2)
-  deliveryFee           Decimal?   @db.Decimal(10, 2)
-  estimatedPrepTime     Int        @default(30) // minutes
-  operatingHours        Json?      // Store as JSON for flexibility
-  user                  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt             DateTime   @default(now())
-  updatedAt             DateTime   @updatedAt
-}
+

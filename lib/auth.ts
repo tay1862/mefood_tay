@@ -23,6 +23,9 @@ export const authOptions: NextAuthOptions = {
         const user = await prisma.user.findUnique({
           where: {
             email: credentials.email
+          },
+          include: {
+            role: true
           }
         })
 
@@ -44,7 +47,12 @@ export const authOptions: NextAuthOptions = {
           email: user.email,
           restaurantName: user.restaurantName,
           ownerName: user.ownerName,
-          ownerImage: user.ownerImage
+          ownerImage: user.ownerImage,
+          isStaff: user.isStaff,
+          role: user.role ? {
+            id: user.role.id,
+            name: user.role.name
+          } : null
         } as any
       }
     })
@@ -74,6 +82,8 @@ export const authOptions: NextAuthOptions = {
           token.id = user.id
           token.restaurantName = user.restaurantName
           token.ownerName = user.ownerName
+          token.isStaff = user.isStaff
+          token.role = user.role
         }
         
         return token
@@ -87,6 +97,8 @@ export const authOptions: NextAuthOptions = {
           session.user.id = token.id as string
           session.user.restaurantName = token.restaurantName as string
           session.user.ownerName = token.ownerName as string | null
+          session.user.isStaff = token.isStaff as boolean
+          session.user.role = token.role as { id: string; name: string } | null
         }
         return session
       } catch (error) {
