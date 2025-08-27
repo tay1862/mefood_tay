@@ -147,6 +147,7 @@ model QRSession {
   orders       Order[]
   staffCalls   StaffCall[]
   musicRequests MusicRequest[]
+  billSplits   BillSplit[]   @relation("QRSessionBillSplits")
   startedAt    DateTime   @default(now())
   endedAt      DateTime?  // When session was closed/bill paid
   createdAt    DateTime   @default(now())
@@ -239,7 +240,7 @@ model MenuItem {
   id           String     @id @default(cuid())
   name         String
   description  String?
-  price        Decimal    
+  price        Float    
   image        String?
   isActive     Boolean    @default(true)
   isAvailable  Boolean    @default(true)
@@ -274,7 +275,7 @@ model SelectionOption {
   id          String    @id @default(cuid())
   name        String    // e.g., "Small", "Large", "Extra Cheese"
   description String?
-  priceAdd    Decimal    @default(0) // additional price
+  priceAdd    Float    @default(0) // additional price
   isAvailable Boolean   @default(true)
   sortOrder   Int       @default(0)
   selectionId String
@@ -336,7 +337,7 @@ model Order {
   mainOrder      Order?         @relation("MainSubOrders", fields: [mainOrderId], references: [id], onDelete: SetNull)
   subOrders      Order[]        @relation("MainSubOrders")
   status         OrderStatus    @default(PENDING)
-  totalAmount    Decimal        
+  totalAmount    Float        
   customerName   String?
   customerPhone  String?
   customerEmail  String?
@@ -360,6 +361,8 @@ model Order {
   cook           User?          @relation("OrderCook", fields: [cookId], references: [id], onDelete: SetNull)
   server         User?          @relation("OrderServer", fields: [servedBy], references: [id], onDelete: SetNull)
   items          OrderItem[]
+  billSplits     BillSplit[]    @relation("OrderBillSplits")
+  payments       Payment[]      @relation("PaymentOrders")
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
   cancellationReasonId String? // Optional: If cancelled
@@ -404,13 +407,13 @@ model BillSplit {
   id           String    @id @default(cuid())
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
-  totalAmount  Decimal
-  paidAmount   Decimal   @db.Decimal(10, 2) @default(0)
+  totalAmount  Float
+  paidAmount   Float   @default(0)
   status       String    @default("PENDING") // PENDING, PAID, PARTIAL_PAID
   qrSessionId  String
-  qrSession    QRSession @relation(fields: [qrSessionId], references: [id])
+  qrSession    QRSession @relation("QRSessionBillSplits", fields: [qrSessionId], references: [id])
   orderId      String?
-  order        Order?    @relation(fields: [orderId], references: [id])
+  order        Order?    @relation("OrderBillSplits", fields: [orderId], references: [id])
 }
 
 // Payment/Billing Management Models
@@ -451,7 +454,8 @@ model Payment {
   // Relations
   session           CustomerSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  orders            Order[]
+  orders            Order[]           @relation("PaymentOrders")
+  items             PaymentItem[]
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 }
@@ -462,9 +466,7 @@ model RestaurantSettings {
   user                  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   currency              String     @default("THB") // e.g., THB, USD, LAK
   language              String     @default("th")  // e.g., th, en, lo
-  taxRate               Decimal    @default(0) @db.Decimal(5, 2)
-  serviceChargeRate     Decimal    @default(0) @db.Decimal(5, 2)
-  autoAcceptOrders      Boolean    @default(true)
+  serviceChargeRate     Float    @default(0)
   printKitchenReceipt   Boolean    @default(true)
   printCustomerReceipt  Boolean    @default(true)
   createdAt             DateTime   @default(now())

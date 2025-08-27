@@ -4,12 +4,13 @@ import { authOptions } from '@/lib/auth'
 import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
-
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
+    const { id } = await params
+    const restaurantId = parseInt(id)
     const session = await getServerSession(authOptions)
 
     if (!session?.user?.id) {
@@ -22,7 +23,7 @@ export async function GET(
     // Fetch menu items with category information for menu display
     const menuItems = await prisma.menuItem.findMany({
       where: { 
-        userId: session.user.id,
+        userId: restaurantId,
         isActive: true // Only return active items for menu display
       },
       select: {
